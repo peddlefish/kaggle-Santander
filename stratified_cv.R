@@ -1,5 +1,7 @@
 library(xgboost)
 library(Matrix)
+library(foreach)
+library(doParallel)
 setwd("C:/Users/Xiaoyu Sun/Desktop/kaggle")
 orig.train <- read.csv("train_filtered_1.csv", stringsAsFactors = F)
 
@@ -49,13 +51,13 @@ shuffle <- function(dtrain, dvalid){
 
 #1.4 Generate train and valid matrix for xgboost training
 gen_matrix <- function(shuffle_result,feature.formula){
-data <- sparse.model.matrix(feature.formula, data =  shuffle_result$dtrain)
-sparseMatrixColNamesTrain <- colnames(data)
-DMMatrixTrain <- xgb.DMatrix(data, label =  shuffle_result$dtrain[, 'TARGET'])
-rm(data)
-dvalid <- xgb.DMatrix(sparse.model.matrix(feature.formula, data =  shuffle_result$dvalid),
-                      label =  shuffle_result$dvalid[, 'TARGET'])
-return(list(dtrain=DMMatrixTrain,dvalid=dvalid))
+  data <- sparse.model.matrix(feature.formula, data =  shuffle_result$dtrain)
+  sparseMatrixColNamesTrain <- colnames(data)
+  DMMatrixTrain <- xgb.DMatrix(data, label =  shuffle_result$dtrain[, 'TARGET'])
+  rm(data)
+  dvalid <- xgb.DMatrix(sparse.model.matrix(feature.formula, data =  shuffle_result$dvalid),
+                        label =  shuffle_result$dvalid[, 'TARGET'])
+  return(list(dtrain=DMMatrixTrain,dvalid=dvalid))
 }
 
 #1.5 straitified cross validation
@@ -63,7 +65,7 @@ str_cv <- function(train_1,train_0, nrounds = 500, max.depth,subsample, colsampl
   auc<-rep(0,5)
   for(i in 1:5){
     # Matrix
-
+    
     strsamp_result <- strsamp(train_1,train_0)
     shuffle_result<-shuffle(strsamp_result$dtrain,strsamp_result$dvalid)
     dvalid.target <-  shuffle_result$dvalid$TARGET
@@ -118,7 +120,7 @@ for(pair in features_pair) {
   f1 <- pair[1]
   f2 <- pair[2]
   if (!(f1 %in% toRemove) & !(f2 %in% toRemove)) {
-    if ((cor(train[[f1]] , train[[f2]])) > 0.999) {
+    if ((cor(train[[f1]] , train[[f2]])) > 0.99) {
       cat(f1, "and", f2, "are highly correlated \n")
       toRemove <- c(toRemove, f2)
     }
@@ -147,11 +149,16 @@ feature.names <- names(train)
 feature.names <- feature.names[-grep('^TARGET$', feature.names)]
 feature.formula <- formula(paste('TARGET ~ ', paste(feature.names, collapse = ' + '), sep = ''))
 
+#setup parallel backend
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl, cores = detectCores() - 1)
+
+ls<-foreach(i = 7:9 , .packages = c("xgboost","Matrix")) %dopar% {
 
 # Parameters Range Setting
-searchGridSubCol <- expand.grid(subsample = seq(0.5, 1, 0.05), 
-                                colsample_bytree = seq(0.5, 1,0.05),
-                                MaxDepth = c(6))
+searchGridSubCol <- expand.grid(subsample = 0.5,#seq(0.5, 1, 0.05), 
+                                colsample_bytree = 0.5,#seq(0.5, 1,0.05),
+                                MaxDepth = c(i))
 ntrees <- 500
 # ----------------------------------------------------------------------
 #################################################################
@@ -168,6 +175,8 @@ aucErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
   auc_cv<-str_cv(train_1,train_0, nrounds = ntrees, max.depth=currentMaxDepth,subsample=currentSubsampleRate, colsample_bytree=currentColsampleRate)
   return(c(auc_cv, currentSubsampleRate, currentColsampleRate,currentMaxDepth))
 })
-write.csv(aucErrorsHyperparameters, 'auc_Hyperparameters_6.csv', row.names=FALSE, quote = FALSE)
-  
+write.csv(aucErrorsHyperparameters, paste0('auc_Hyperparameters_',i,'.csv'), row.names=FALSE, quote = FALSE)
+}
+stopCluster(cl)
+
 
