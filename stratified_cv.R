@@ -3,7 +3,7 @@ library(Matrix)
 library(foreach)
 library(doParallel)
 setwd("C:/Users/Xiaoyu Sun/Desktop/kaggle")
-orig.train <- read.csv("train_filtered_1.csv", stringsAsFactors = F)
+orig.train <- read.csv("train_filtered_2.csv", stringsAsFactors = F)
 
 # ----------------------------------------------------------------------
 #################################################################
@@ -153,13 +153,13 @@ feature.formula <- formula(paste('TARGET ~ ', paste(feature.names, collapse = ' 
 cl <- makeCluster(detectCores() - 1)
 registerDoParallel(cl, cores = detectCores() - 1)
 
-ls<-foreach(i = 7:9 , .packages = c("xgboost","Matrix")) %dopar% {
+ls<-foreach(i = 7 , .packages = c("xgboost","Matrix")) %dopar% {
 
 # Parameters Range Setting
-searchGridSubCol <- expand.grid(subsample = 0.5,#seq(0.5, 1, 0.05), 
-                                colsample_bytree = 0.5,#seq(0.5, 1,0.05),
+searchGridSubCol <- expand.grid(subsample = seq(0.5, 1, 0.05), 
+                                colsample_bytree = seq(0.5, 1,0.05),
                                 MaxDepth = c(i))
-ntrees <- 500
+ntrees <- 50
 # ----------------------------------------------------------------------
 #################################################################
 ######## 4. Parameter Tunning ###################################
